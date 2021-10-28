@@ -1,4 +1,12 @@
-﻿namespace NugetForUnity
+﻿using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
+// To support play mode testing we have to use assembly defs, so to keep the methods internal we'll make
+// the test assemblies able to see the internal methods
+[assembly: InternalsVisibleTo("PlayTest")]
+[assembly: InternalsVisibleTo("Assembly-CSharp-Editor")] // Default unity assembly with editor code/tests
+namespace NugetForUnity
 {
     using System;
     using System.Collections.Generic;
@@ -30,6 +38,11 @@
         /// The path to the nuget.config file.
         /// </summary>
         public static readonly string NugetConfigFilePath = Path.Combine(Application.dataPath, "./NuGet.config");
+        
+        /// <summary>
+        /// The path to the settings.xml file
+        /// </summary>
+        public static readonly string SettingsFilePath = Path.Combine(Application.dataPath, "./NuGet/settings.xml");
 
         /// <summary>
         /// The path to the packages.config file.
@@ -48,8 +61,15 @@
 
         /// <summary>
         /// The loaded NuGet.config file that holds the settings for NuGet.
+        /// <seealso cref="SettingsFile"/>
         /// </summary>
         public static NugetConfigFile NugetConfigFile { get; private set; }
+        
+        /// <summary>
+        /// The loaded settings.json file that holds settings for NuGetForUnity.
+        /// <seealso cref="NugetConfigFile"/>
+        /// </summary>
+        public static Settings SettingsFile { get; private set; }
 
         /// <summary>
         /// Backing field for the packages.config file.
@@ -127,6 +147,7 @@
 
                 // Load the NuGet.config file
                 LoadNugetConfigFile();
+                LoadSettingFile();
 
                 // create the nupkgs directory, if it doesn't exist
                 if (!Directory.Exists(PackOutputDirectory))
@@ -144,6 +165,20 @@
             }
         }
 
+        public static void LoadSettingFile()
+        {
+            if (File.Exists(SettingsFilePath))
+            {
+                SettingsFile = Settings.Load(SettingsFilePath);
+            }
+            else
+            {
+                Debug.LogFormat("No settings.json file found. Creating default at {0}", SettingsFilePath);
+                SettingsFile = Settings.CreateDefault(SettingsFilePath);
+                AssetDatabase.Refresh();
+            }
+        }
+        
         /// <summary>
         /// Loads the NuGet.config file.
         /// </summary>
@@ -388,10 +423,6 @@
 
             // For now, delete src.  We may use it later...
             DeleteDirectory(packageInstallDirectory + "/src");
-
-            // Since we don't automatically fix up the runtime dll platforms, remove them until we improve support
-            // for this newer feature of nuget packages.
-            DeleteDirectory(Path.Combine(packageInstallDirectory, "runtimes"));
 
             // Delete documentation folders since they sometimes have HTML docs with JavaScript, which Unity tried to parse as "UnityScript"
             DeleteDirectory(packageInstallDirectory + "/docs");
@@ -873,7 +904,22 @@
             directoryInfo.Attributes = FileAttributes.Normal;
 
             // recursively delete the directory
-            directoryInfo.Delete(true);
+            try
+            {
+                directoryInfo.Delete(true);
+            }
+            catch (UnauthorizedAccessException e)
+            {
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && e.Message.Contains(".dll"))
+                {
+                    Debug.LogError("Windows was unable to delete all the files, if you are using Native files this is because the file is in use by Unity. Please restart Unity to remove all the files");
+                }
+                else
+                {
+                    throw;
+                }
+            }
+            
         }
 
         /// <summary>
@@ -885,7 +931,22 @@
             if (File.Exists(filePath))
             {
                 File.SetAttributes(filePath, FileAttributes.Normal);
-                File.Delete(filePath);
+                try
+                {
+                    File.Delete(filePath);
+                }
+                catch (UnauthorizedAccessException e)
+                {
+                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && e.Message.Contains(".dll"))
+                    {
+                        Debug.LogError(
+                            "Windows was unable to delete all the files, if you are using Native files this is because the file is in use by Unity. Please restart Unity to remove all the files");
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
             }
         }
 
@@ -922,7 +983,7 @@
         public static void Uninstall(NugetPackageIdentifier package, bool refreshAssets = true)
         {
             LogVerbose("Uninstalling: {0} {1}", package.Id, package.Version);
-
+            
             // update the package.config file
             PackagesConfigFile.RemovePackage(package);
             PackagesConfigFile.Save(PackagesConfigFilePath);
@@ -1001,6 +1062,7 @@
         public static void UpdateInstalledPackages()
         {
             LoadNugetConfigFile();
+            LoadSettingFile();
 
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
@@ -1402,9 +1464,9 @@
                     EditorUtility.DisplayProgressBar(string.Format("Installing {0} {1}", package.Id, package.Version), "Extracting Package", 0.6f);
                 }
 
+                string baseDirectory = Path.Combine(NugetConfigFile.RepositoryPath, string.Format("{0}.{1}", package.Id, package.Version));
                 if (File.Exists(cachedPackagePath))
                 {
-                    string baseDirectory = Path.Combine(NugetConfigFile.RepositoryPath, string.Format("{0}.{1}", package.Id, package.Version));
 
                     // unzip the package
                     using (ZipArchive zip = ZipFile.OpenRead(cachedPackagePath))
