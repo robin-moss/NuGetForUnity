@@ -12,8 +12,14 @@ namespace NugetForUnity
     {
         private const string RuntimesFolderName = "runtimes";
         private const string NativeFolderName = "native";
+        private const string AnalyzersFolderName = "analyzers";
         private const string AssetsFolderName = "Assets";
 
+        /// <summary>
+        /// Mark an asset as a Roslyn Analyzer to Unity
+        /// </summary>
+        private const string RoslynAnalyzerLabel = "RoslynAnalyzer";
+        
         /// <summary>
         /// Used to mark an asset as already processed by this class.
         /// </summary>
@@ -59,9 +65,17 @@ namespace NugetForUnity
                 .Where(path => path.Contains(NativeFolderName))
                 .Where(File.Exists)
                 .ToList();
+
+            var analyzerAssetsFiles = nugetForUnityAssets
+                .Where(path => path.Contains(AnalyzersFolderName))
+                .Where(File.Exists)
+                .ToList();
+            
             var runtimeResults = runtimeAssetsFiles.Select(path => (path, HandleRuntime(path))).ToList();
+            var analyzerResults = analyzerAssetsFiles.Select(path => (path, HandleAnalyzer(path))).ToList();
 
             LogResults("Handle Runtimes", runtimeResults);
+            LogResults("Roslyn Analyzers", analyzerResults);
         }
 
         private static void LogResults(string type, IList<(string, ProcessState)> results)
@@ -189,6 +203,31 @@ namespace NugetForUnity
             // Persist and reload the change to the meta file
             plugin.SaveAndReimport();
             NugetHelper.LogVerbose("Runtime {0} of asset {1} compatability set", platform, assetFilePath);
+            return ProcessState.Success;
+        }
+
+        /// <summary>
+        ///     Mark the files are Roslyn Analysers by excluding them from all builds and adding the
+        ///     <see cref="RoslynAnalyzerLabel" /> label.
+        ///     <para />
+        ///     <a href="https://docs.unity3d.com/Manual/roslyn-analyzers.html">Unity Manual on Roslyn Analyzers</a>
+        /// </summary>
+        /// <param name="metaFilePath">Path to a meta file</param>
+        /// <returns>True if it was able to update the asset</returns>
+        private static ProcessState HandleAnalyzer(string metaFilePath)
+        {
+            if (!GetPluginImporter(metaFilePath, out var plugin)) return ProcessState.Failure;
+
+            if (AlreadyProcessed(plugin)) return ProcessState.AlreadyProcessed;
+
+            plugin.SetCompatibleWithAnyPlatform(false);
+            plugin.SetCompatibleWithEditor(false);
+            foreach (var platform in Enum.GetValues(typeof(BuildTarget)))
+                plugin.SetExcludeFromAnyPlatform((BuildTarget)platform, false);
+
+            AssetDatabase.SetLabels(plugin, new[] { RoslynAnalyzerLabel, ProcessedLabel });
+            plugin.SaveAndReimport();
+
             return ProcessState.Success;
         }
     }

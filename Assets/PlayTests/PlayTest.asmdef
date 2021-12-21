@@ -2,8 +2,6 @@
     "name": "PlayTest",
     "rootNamespace": "",
     "references": [
-        "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner",
         "NuGetForUnity"
     ],
     "includePlatforms": [],
