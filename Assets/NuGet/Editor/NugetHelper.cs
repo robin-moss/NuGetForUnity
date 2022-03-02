@@ -107,6 +107,8 @@
         /// </summary>
         static NugetHelper()
         {
+            if (SessionState.GetBool("ProjectOpened", false))
+                return;
             insideInitializeOnLoad = true;
             try
             {
@@ -134,6 +136,7 @@
 
                 // restore packages - this will be called EVERY time the project is loaded or a code-file changes
                 Restore();
+                SessionState.SetBool("ProjectOpened", true);
             }
             finally
             {
