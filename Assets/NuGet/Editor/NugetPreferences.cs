@@ -11,7 +11,7 @@
         /// <summary>
         /// The current version of NuGet for Unity.
         /// </summary>
-        public const string NuGetForUnityVersion = "3.0.11-ocado";
+        public const string NuGetForUnityVersion = "3.0.12-ocado";
 
         /// <summary>
         /// The current position of the scroll bar in the GUI.

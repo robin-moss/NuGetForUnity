@@ -483,7 +483,7 @@ namespace NugetForUnity
             if (Directory.Exists(packageInstallDirectory + "/tools"))
             {
                 // Move the tools folder outside of the Unity Assets folder
-                string toolsInstallDirectory = Path.Combine(Application.dataPath, string.Format("../Packages/{0}.{1}/tools", package.Id, package.Version));
+                string toolsInstallDirectory = Path.Combine(Application.dataPath, string.Format("../NugetTools/{0}.{1}/tools", package.Id, package.Version));
 
                 LogVerbose("Moving {0} to {1}", packageInstallDirectory + "/tools", toolsInstallDirectory);
 
